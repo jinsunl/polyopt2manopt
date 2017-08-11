@@ -1,0 +1,188 @@
+function [ M,Const,b_aux, Mandim ] = poly2mat_constr( f,h, var, vlambda)
+%UNTITLED Summary of this function goes here
+%   f is the polynomial
+%   h is the vector of semi-algebriac polynomials.
+
+    V = vlambda; % vector of all decision variable
+    df = full(deg(f,var));
+    dh = full(deg(h,var));
+    dtotal = round((df+dh)/2);
+    basis_ftotal = monomials(var,0:dtotal);
+    basis = basis_ftotal;
+    start_end = [1,length(basis_ftotal)]; % a list that remembers the starting and ending index of the basis of each sos polys in basis. First column is the starting point.
+    ftotal = f;
+    
+    % generate the gram matrix for ftotal = f-sym si*hi. but later on
+    % G will be the block diagonal concatenation of all gram matrix. Also
+    % generate V, basis, start_end index and Mandim. 
+    % Notice: we want G to lie on the manifold of YY'.
+    n = length(basis_ftotal);
+    G = msspoly(zeros(n));
+    vtotal = msspoly('@',n*(n+1)/2);
+    V = [V;vtotal];
+    idx = 1;
+    for i=1:n,
+        for j = 1:n,
+            if j>=i,
+                G(i,j) = vtotal(idx);
+                idx = idx+1;
+            else
+                G(i,j) = G(j,i);
+            end
+        end
+    end
+    fgram = basis_ftotal'*G*basis_ftotal;
+    ascii = 97:122;   % ascii code for represent 'a' to 'z'. hope # of h(i) is smaller than 26 :)
+    
+    s = msspoly(zeros(length(h),1));
+    for i = 1:length(h),
+        basis_si = monomials(var,0:floor(dtotal-full(deg(h(i),var))));  % basis for si
+        basis = [basis;basis_si];  
+        n = length(basis_si);
+        start_end = [start_end; start_end(i,2)+1, start_end(i,2)+n];
+        v{i} = msspoly(char(ascii(i)),n*(n+1)/2);
+        V  = [V;v{i}];
+        Gs{i} = msspoly(zeros(n));  % gram matrix for si
+        idx = 1;
+        for ii = 1:n,
+            for jj = 1:n,
+                if jj>=ii,
+                    Gs{i}(ii,jj) = v{i}(idx);
+                    idx = idx+1;
+                else
+                    Gs{i}(ii,jj) = Gs{i}(jj,ii);
+                end
+            end
+        end
+        s(i) = basis_si'*Gs{i}*basis_si;
+        G = blkdiag(G,Gs{i});
+        ftotal = ftotal - s(i)*h(i);
+    end
+    Mandim = length(basis); % dimension of the manifold
+    X = sym('X',[length(V),1],'real');
+    
+    
+    % generate index matrix
+    list = zeros(Mandim);
+    for i = 1:Mandim,
+        list(:,i) = [(i-1)*Mandim+[1:Mandim]'];
+    end
+    
+    
+    
+    
+    % generate constraint C1: M1*V=b_aux1*vec(YY') where Y is our decision variable on the manifold. 
+    funG = fn(G,V);
+    GYY = funG(X);
+    temp = funG(ones(size(X)));
+    temp = list.*temp;
+    listC1 = tril(temp);
+    listC1 = reshape(listC1,[],1);
+    listC1 = listC1(find(listC1~=0));
+    M1 = eye(length(V)-1);
+    b_aux1 = eye(Mandim^2);
+    b_aux1 = b_aux1(listC1,:);
+    Const1 = zeros(size(M1,1),1);
+    
+    
+    
+    
+    
+    
+    % generate constraint C2: f0=(f_sos-sum si*hi)-f_G=0
+    f0 = ftotal-fgram;
+    [base,para] = mss2para_mono(f0,V);
+    fun = fn(para,V);
+    para = fun(X);
+    M2 = double(jacobian(para,X));
+    Const2 = double(para-M2*X);
+    b_aux2 = zeros(size(Const2,1),Mandim^2);
+    
+    % generate constraint C3: M3*vec(YY') because of the formation of G
+    
+    listC3 = tril(list-temp);    
+    listC3 = reshape(listC3,[],1);
+    listC3 = listC3(find(listC3~=0));
+    b_aux3 = eye(Mandim^2);
+    b_aux3 = b_aux3(listC3,:);
+    Const3 = zeros(size(b_aux3,1),1);
+    M3 = zeros(size(b_aux3,1),size(M2,2));
+    
+    M{1} = M1;
+    M{2} = M2;
+    M{3} = M3;
+    Const{1} = Const1;
+    Const{2} = Const2;
+    Const{3} = Const3;
+    b_aux{1} = b_aux1;
+    
+    
+    
+    
+    
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     f = F(q);
+%     d = full(deg(f,var));
+%     basis = monomials(var,0:round(d/2));
+%     Xdim{q} = length(basis);
+%     n = length(basis);
+%     vG = msspoly('v',n*(n+1)/2);
+%     v = [vlambda;vG]; % 'decision variable' when spotless is in use
+%     G = msspoly(zeros(n));% Gram matrix which represent f
+%     idx = 1;
+%     for i=1:n,
+%         for j = 1:n,
+%             if j>=i,
+%                 G(i,j) = vG(idx);
+%                 idx = idx+1;
+%             else
+%                 G(i,j) = G(j,i);
+%             end
+%         end
+%     end
+%     
+%     % construct M1 s.t. M1*v=vec(YY') where Y is our decision variable on the manifold. 
+%     f_gram = basis'*G*basis;
+%     m = sym('m',[length(v),1],'real');
+%     fun = fn(G,v);
+%     Gsym = fun(m);
+%     Gsym = reshape(Gsym,size(Gsym,1)^2,1);
+%     temp = [];
+%     for i = 1:n,
+%         temp = [temp,(i-1)*n+[1:n]'];
+%     end
+%     list = tril(temp);
+%     list = reshape(list,n^2,1);
+%     del_list = find(list==0);
+%     list(del_list)=[];
+%     M1 = double(jacobian(Gsym(list),m));
+%         
+%     
+%     
+%      
+%     
+%     
+%     
+%     
+%     % construct M2,Const s.t. M2*v+Const = 0. This represent f-f_gram=0,
+%     % which means G is the gram matrix of f. 
+%     f_zero = f-f_gram;
+% %     mono_fzero = p2d_decomp(f_zero);
+% %     [base,para] = para_mono(mono_fzero,var);
+%     [base,para] = mss2para_mono(f_zero,v);
+%     
+%     fun = fn(para,v);
+%     para = fun(m);
+%     M2 = double(jacobian(para,m));
+%     Const{q} = [zeros(n*(n+1)/2,1);double(para-M2*m)];
+%     
+%     % construct M and b_aux s.t. b_aux*vec(YY') = [vec(YY')*;0] where vec(YY')* doesn't contain the symmetric elements in YY'. 
+%     b_aux{q} = [eye(n^2);zeros(length(para),n^2)];
+%     b_aux{q}(del_list,:) = [];
+%     M{q} = [M1;M2];
+%     
+%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    
+end
+
