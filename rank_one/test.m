@@ -18,10 +18,10 @@ clear all,close all,clc;
 x = msspoly('x');
 lambda = msspoly('l');
 f = 3+2*x+x^2;
-f = 6+4*x+6*x^2+4*x^3+x^4;
+% f = 6+4*x+6*x^2+4*x^3+x^4;
 % f = 35-4*x-7*x^2-16*x^3+5*x^4-x^5+x^6;
 % f = 3.5+6.3*x-8.7*x^2-5*x^3+6*x^4;
-f = 3.5+6.3*x-8.7*x^3-5*x^5+6*x^8;
+% f = 3.5+6.3*x-8.7*x^3-5*x^5+6*x^8;
 
 
 f_sos = f-lambda;
@@ -31,7 +31,7 @@ f_sos = f-lambda;
 % f = x'*[3 -2 1;-2 5 -3;1 -3 6]*x+6;
 % f_sos = f-lambda;
 
-x = msspoly('x',10);
+x = msspoly('x',15);
 vec = monomials(x,0:2);
 temp = randn(length(vec),round(length(vec)/2));
 temp = temp*temp';
@@ -39,8 +39,25 @@ f = vec'*temp*vec+8;
 f_sos = f-lambda;
 
 
-h = [x-5];
+h = [1-x;x+1];
 % h = [];
+
+
+
+
+
+%% spotless
+% prog = spotsosprog;
+% prog = prog.withIndeterminate(x);
+% [prog,LAMBDA] = prog.newFree(1);
+% prog = sosOnK(prog,f-LAMBDA,x,h,4);
+% options = spot_sdp_default_options();
+% options.verbose = 2;
+% sol = prog.minimize(-LAMBDA, @spot_mosek_sos, options);
+% res_spot = sol.eval(LAMBDA);
+
+
+%% manifold
 if isempty(h),
         dh = 0;
     else
@@ -60,7 +77,7 @@ i = round(max(full(deg(f,x)),dh)/2);
 
 
 %%%%%%%%% parameters %%%%%%%%%%%%%%%
-Rank = 1;                   %
+ Rank = 1;                          %
 N =  10000000;                     %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -75,17 +92,18 @@ problem.cost = @(Y)cost( Y,F,A,C,N,B,b );
 problem.egrad = @(Y)egrad(Y,F,A,C,N,B,b);
 
 % % part3: Hessian
-% problem.ehess = @(Y,U)ehess(Y,U,F,A,C,N,B,b);
+problem.ehess = @(Y,U)ehess(Y,U,F,A,C,N,B,b);
 % 
 % % manopt
-checkgradient(problem); pause;
-checkhessian(problem); pause;
+% checkgradient(problem); pause;
+% checkhessian(problem); pause;
 
 options.maxiter = 100000;
 
 [Y,cost] = trustregions(problem,[],options);
 res = Y
 cost = Y'*F*Y
+
 
 
 
